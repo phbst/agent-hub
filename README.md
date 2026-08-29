@@ -65,6 +65,15 @@ The command waits for approval. After the administrator approves the pending row
 systemctl --user enable --now agent-hub-worker.service
 ```
 
+On macOS, install the worker as a per-user LaunchAgent after registration:
+
+```bash
+./scripts/install-macos-worker.sh ~/.config/agent-hub/worker.toml
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.agent-hub.worker.plist
+launchctl kickstart -k "gui/$(id -u)/com.agent-hub.worker"
+launchctl print "gui/$(id -u)/com.agent-hub.worker"
+```
+
 ## Operational checks
 
 ```bash

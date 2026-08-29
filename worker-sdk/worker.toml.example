@@ -1,0 +1,19 @@
+[hub]
+url = "https://PROJECT_REF.supabase.co"
+anon_key = "sb_publishable_REPLACE_ME"
+credentials_file = "~/.config/agent-hub/sdk-credentials.json"
+
+[agent]
+name = "desktop-claude-sdk"
+labels = ["local-files", "claude-sdk"]
+mode = "sdk"
+max_concurrency = 2
+workspace_root = "~/agent-hub-workspaces"
+heartbeat_seconds = 30
+
+# This section is required by the common config format but ignored by worker-sdk.
+[executor]
+command = "false"
+args = []
+prompt_stdin = true
+result_max_chars = 200000

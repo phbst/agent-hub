@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Continue the hub-worker skill loop immediately. Do not end the session or write conversational filler."
+          }
+        ]
+      }
+    ]
+  }
+}

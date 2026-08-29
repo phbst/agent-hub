@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist/node",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["shared/**/*.ts", "worker-cli/**/*.ts", "worker-sdk/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

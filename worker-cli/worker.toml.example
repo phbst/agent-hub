@@ -1,0 +1,18 @@
+[hub]
+url = "https://PROJECT_REF.supabase.co"
+anon_key = "sb_publishable_REPLACE_ME"
+credentials_file = "~/.config/agent-hub/credentials.json"
+
+[agent]
+name = "server-codex"
+labels = ["linux", "codex", "server-files"]
+mode = "cli"
+max_concurrency = 2
+workspace_root = "~/agent-hub-workspaces"
+heartbeat_seconds = 30
+
+[executor]
+command = "codex"
+args = ["exec", "--skip-git-repo-check", "--sandbox", "workspace-write", "-C", "{workdir}", "-"]
+prompt_stdin = true
+result_max_chars = 200000

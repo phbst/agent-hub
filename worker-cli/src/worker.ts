@@ -55,14 +55,24 @@ export class Worker {
   async stop(): Promise<void> {
     this.#stopping = true;
     if (this.#heartbeat) clearInterval(this.#heartbeat);
-    if (this.#channel) await this.#client.removeChannel(this.#channel);
+    if (this.#channel) {
+      await Promise.race([
+        this.#client.removeChannel(this.#channel),
+        new Promise((resolve) => setTimeout(resolve, 3_000)),
+      ]);
+    }
     for (const running of this.#running.values()) running.controller.abort();
     await Promise.race([
       Promise.allSettled([...this.#running.values()].map((running) => running.promise)),
-      new Promise((resolve) => setTimeout(resolve, 15_000)),
+      new Promise((resolve) => setTimeout(resolve, 7_000)),
     ]);
-    const { error } = await this.#client.from("agents").update({ status: "offline", last_heartbeat: new Date().toISOString() }).eq("id", this.#credentials.agent_id);
+    const offline = await Promise.race([
+      this.#client.from("agents").update({ status: "offline", last_heartbeat: new Date().toISOString() }).eq("id", this.#credentials.agent_id),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3_000)),
+    ]);
+    const error = offline?.error;
     if (error) log("worker.offline.failed", { error });
+    this.#client.auth.stopAutoRefresh();
   }
 
   async #heartbeatNow(): Promise<void> {

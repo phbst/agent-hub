@@ -396,6 +396,8 @@ revoke all on public.bootstrap_tokens, public.agents, public.tasks, public.event
 grant select, insert, update, delete on public.bootstrap_tokens, public.agents, public.tasks to authenticated;
 grant select, insert on public.events to authenticated;
 grant usage, select on sequence public.events_id_seq to authenticated;
+grant select, insert, update, delete on public.bootstrap_tokens, public.agents, public.tasks, public.events to service_role;
+grant usage, select on sequence public.events_id_seq to service_role;
 revoke execute on function public.is_hub_admin(), public.current_agent_id(), public.enforce_task_transition(),
   public.restrict_agent_update(), public.log_task_event(), public.recount_agent(uuid),
   public.consume_bootstrap_token(text, text, text[], text, integer),

@@ -1,4 +1,4 @@
-import { adminClient, json, options, randomSecret, sha256, userClient } from "../_shared/http.ts";
+import { adminClient, bearerToken, errorMessage, json, options, sha256, userClient } from "../_shared/http.ts";
 
 async function registrationPassword(token: string, agentId: string): Promise<string> {
   const pepper = Deno.env.get("REGISTRATION_PEPPER");
@@ -15,7 +15,7 @@ Deno.serve(async (request) => {
     const body = await request.json();
     const client = adminClient();
     if (body.action === "confirm") {
-      const { data, error } = await userClient(request).auth.getUser();
+      const { data, error } = await userClient(request).auth.getUser(bearerToken(request));
       if (error || !data.user) throw new Error("agent authentication required");
       const { error: updateError } = await client.from("agents").update({ registration_confirmed_at: new Date().toISOString() }).eq("auth_user_id", data.user.id);
       if (updateError) throw updateError;
@@ -64,6 +64,6 @@ Deno.serve(async (request) => {
     }
     return json({ status: "online", agent_id: agent.id, credentials: { email, password } });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : String(error) }, 400);
+    return json({ error: errorMessage(error) }, 400);
   }
 });

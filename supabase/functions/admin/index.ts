@@ -1,4 +1,4 @@
-import { adminClient, json, options, randomSecret, requireAdmin, sha256 } from "../_shared/http.ts";
+import { adminClient, errorMessage, json, options, randomSecret, requireAdmin, sha256 } from "../_shared/http.ts";
 
 Deno.serve(async (request) => {
   const preflight = options(request);
@@ -33,6 +33,6 @@ Deno.serve(async (request) => {
     }
     return json({ error: "unknown action" }, 400);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : String(error) }, 401);
+    return json({ error: errorMessage(error) }, 401);
   }
 });

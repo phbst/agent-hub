@@ -9,13 +9,6 @@ ExecStart=@NODE_BIN@ @WORKER_MAIN@ start --config @CONFIG_PATH@
 Restart=on-failure
 RestartSec=5
 UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectControlGroups=true
-ProtectHostname=true
-ProtectKernelTunables=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
 
 [Install]
 WantedBy=default.target

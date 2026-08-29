@@ -10,6 +10,10 @@ const columns: TaskStatus[] = ["pending", "assigned", "claimed", "running", "don
 const activeColumns: TaskStatus[] = ["pending", "assigned", "claimed", "running", "failed"];
 const demo = import.meta.env.DEV && new URLSearchParams(window.location.search).has("demo");
 
+function loginRedirectUrl(): string {
+  return new URL(window.location.pathname, window.location.origin).toString();
+}
+
 function age(timestamp: string | null): string {
   if (!timestamp) return "从未";
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000));
@@ -23,7 +27,7 @@ function Login(): React.ReactElement {
   const [message, setMessage] = useState("");
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: loginRedirectUrl() } });
     setMessage(error ? error.message : "登录链接已发送，请检查邮箱。");
   };
   return <main className="login-shell"><section className="login-panel"><div className="brand-mark"><ShieldCheck size={22} /> Agent Hub</div><h1>管理员登录</h1><p>使用白名单邮箱接收一次性登录链接。</p><form onSubmit={submit}><label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><button type="submit"><Send size={17} />发送登录链接</button></form>{message && <div className="notice">{message}</div>}</section></main>;

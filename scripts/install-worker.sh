@@ -21,7 +21,7 @@ ln -sfn "$RELEASE" "$APP/current"
 escape() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
 sed \
   -e "s|@NODE_BIN@|$(escape "$NODE")|g" \
-  -e "s|@WORKER_MAIN@|$(escape "$APP/current/dist/node/worker-cli/src/main.js")|g" \
+  -e "s|@WORKER_MAIN@|$(escape "$APP/current/node/worker-cli/src/main.js")|g" \
   -e "s|@CONFIG_PATH@|$(escape "$CONFIG")|g" \
   worker-cli/deploy/agent-hub-worker.service.in > "$SYSTEMD/agent-hub-worker.service.new"
 chmod 600 "$SYSTEMD/agent-hub-worker.service.new"

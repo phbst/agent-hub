@@ -21,14 +21,20 @@ if (command === "register") {
   const worker = new Worker(config, await readCredentials(config.hub.credentials_file));
   await worker.start();
   let stopping = false;
-  const stop = async (): Promise<void> => {
-    if (stopping) return;
-    stopping = true;
-    await worker.stop();
-  };
-  process.once("SIGINT", () => void stop());
-  process.once("SIGTERM", () => void stop());
-  while (!stopping) await new Promise((resolve) => setTimeout(resolve, 1000));
+  await new Promise<void>((resolve) => {
+    const stop = async (): Promise<void> => {
+      if (stopping) return;
+      stopping = true;
+      try {
+        await worker.stop();
+      } finally {
+        resolve();
+      }
+    };
+    process.once("SIGINT", () => void stop());
+    process.once("SIGTERM", () => void stop());
+  });
+  process.exit(0);
 } else {
   throw new Error(`unknown command: ${command}`);
 }

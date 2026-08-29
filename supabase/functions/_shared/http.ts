@@ -12,6 +12,12 @@ export function json(payload: unknown, status = 200): Response {
   });
 }
 
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message;
+  return String(error);
+}
+
 export function options(request: Request): Response | null {
   return request.method === "OPTIONS" ? new Response(null, { status: 204, headers: corsHeaders }) : null;
 }
@@ -29,9 +35,16 @@ export function userClient(request: Request) {
   });
 }
 
+export function bearerToken(request: Request): string {
+  const authorization = request.headers.get("authorization") ?? "";
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  if (!match?.[1]) throw new Error("bearer token required");
+  return match[1];
+}
+
 export async function requireAdmin(request: Request): Promise<{ id: string }> {
   const client = userClient(request);
-  const { data, error } = await client.auth.getUser();
+  const { data, error } = await client.auth.getUser(bearerToken(request));
   if (error || !data.user || data.user.app_metadata?.role !== "admin") throw new Error("admin authentication required");
   return { id: data.user.id };
 }

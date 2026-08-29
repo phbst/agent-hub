@@ -9,6 +9,12 @@ import { executeTask } from "./executor.js";
 type TaskExecutor = typeof executeTask;
 type RunningTask = { controller: AbortController; promise: Promise<void> };
 
+export function isSessionAuthorizationError(error: { code?: string; message?: string }): boolean {
+  return error.code === "42501"
+    || error.code === "PGRST301"
+    || /jwt|permission denied for function agent_heartbeat|not authenticated/i.test(error.message ?? "");
+}
+
 export class Worker {
   readonly #config: WorkerConfig;
   readonly #credentials: WorkerCredentials;
@@ -17,6 +23,8 @@ export class Worker {
   readonly #running = new Map<string, RunningTask>();
   #channel: RealtimeChannel | null = null;
   #heartbeat: NodeJS.Timeout | null = null;
+  #authRecovery: Promise<void> | null = null;
+  #lastAuthRecoveryAt = 0;
   #stopping = false;
 
   constructor(config: WorkerConfig, credentials: WorkerCredentials, executor: TaskExecutor = executeTask) {
@@ -28,8 +36,9 @@ export class Worker {
 
   async start(): Promise<void> {
     await mkdir(this.#config.agent.workspace_root, { recursive: true, mode: 0o700 });
-    const { data, error } = await this.#client.auth.signInWithPassword({ email: this.#credentials.email, password: this.#credentials.password });
-    if (error || !data.session) throw error ?? new Error("agent login failed");
+    await this.#signIn();
+    const { data } = await this.#client.auth.getSession();
+    if (!data.session) throw new Error("agent session unavailable after login");
     const confirmation = await fetch(`${this.#config.hub.url}/functions/v1/register`, {
       method: "POST",
       headers: { "content-type": "application/json", apikey: this.#config.hub.anon_key, authorization: `Bearer ${data.session.access_token}` },
@@ -38,6 +47,17 @@ export class Worker {
     if (!confirmation.ok) throw new Error(`registration confirmation failed: ${confirmation.status} ${await confirmation.text()}`);
     await this.#heartbeatNow();
     this.#heartbeat = setInterval(() => void this.#heartbeatNow(), this.#config.agent.heartbeat_seconds * 1000);
+    this.#subscribe();
+    await this.#catchUp();
+    log("worker.started", { agentId: this.#credentials.agent_id, name: this.#config.agent.name });
+  }
+
+  async #signIn(): Promise<void> {
+    const { data, error } = await this.#client.auth.signInWithPassword({ email: this.#credentials.email, password: this.#credentials.password });
+    if (error || !data.session) throw error ?? new Error("agent login failed");
+  }
+
+  #subscribe(): void {
     this.#channel = this.#client
       .channel(`agent-tasks-${this.#credentials.agent_id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks", filter: `assigned_to=eq.${this.#credentials.agent_id}` }, (payload) => {
@@ -48,8 +68,6 @@ export class Worker {
         log("realtime.status", { status });
         if (status === "SUBSCRIBED") void this.#catchUp();
       });
-    await this.#catchUp();
-    log("worker.started", { agentId: this.#credentials.agent_id, name: this.#config.agent.name });
   }
 
   async stop(): Promise<void> {
@@ -77,7 +95,44 @@ export class Worker {
 
   async #heartbeatNow(): Promise<void> {
     const { error } = await this.#client.rpc("agent_heartbeat");
-    if (error) log("heartbeat.failed", { error });
+    if (!error) return;
+    if (!isSessionAuthorizationError(error)) {
+      log("heartbeat.failed", { error });
+      return;
+    }
+    try {
+      await this.#recoverAuthentication();
+      const retry = await this.#client.rpc("agent_heartbeat");
+      if (retry.error) log("heartbeat.failed", { error: retry.error });
+      else log("heartbeat.recovered");
+    } catch (recoveryError) {
+      log("heartbeat.auth-recovery.failed", { error: recoveryError });
+    }
+  }
+
+  async #recoverAuthentication(): Promise<void> {
+    if (this.#authRecovery) return this.#authRecovery;
+    if (Date.now() - this.#lastAuthRecoveryAt < 60_000) throw new Error("authentication recovery is cooling down");
+    this.#lastAuthRecoveryAt = Date.now();
+    this.#authRecovery = (async () => {
+      await this.#signIn();
+      const staleChannel = this.#channel;
+      this.#channel = null;
+      if (staleChannel) {
+        await Promise.race([
+          this.#client.removeChannel(staleChannel),
+          new Promise((resolve) => setTimeout(resolve, 3_000)),
+        ]);
+      }
+      if (!this.#stopping) {
+        this.#subscribe();
+        await this.#catchUp();
+      }
+      log("worker.reauthenticated");
+    })().finally(() => {
+      this.#authRecovery = null;
+    });
+    return this.#authRecovery;
   }
 
   async #catchUp(): Promise<void> {

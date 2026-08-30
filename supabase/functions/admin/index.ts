@@ -31,6 +31,15 @@ Deno.serve(async (request) => {
       if (error) throw error;
       return json({ revoked: true });
     }
+    if (body.action === "remove") {
+      const { data: agent, error: readError } = await client.from("agents").select("auth_user_id,status,name").eq("id", body.agent_id).single();
+      if (readError) throw readError;
+      if (agent.status !== "revoked") return json({ error: "只能删除已吊销的 agent,请先吊销" }, 400);
+      if (agent.auth_user_id) await client.auth.admin.deleteUser(agent.auth_user_id);
+      const { error } = await client.from("agents").delete().eq("id", body.agent_id);
+      if (error) throw error;
+      return json({ removed: true, name: agent.name });
+    }
     return json({ error: "unknown action" }, 400);
   } catch (error) {
     return json({ error: errorMessage(error) }, 401);

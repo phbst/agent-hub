@@ -109,7 +109,7 @@ agenthub admin task create "跑一遍集成测试" --target agent:server-codex -
 agenthub admin task answer 3fa8 "低峰期执行"  # 拍板答复并恢复执行
 agenthub admin task cancel 3fa8            # 实时中止 running 任务
 agenthub admin task log 3fa8               # 打印推理过程 transcript
-agenthub admin agents approve new-runner   # 审批注册;还有 revoke/pause/resume/edit
+agenthub admin agents approve new-runner   # 审批注册;还有 revoke/remove/pause/resume/edit
 agenthub admin token --minutes 120 --uses 3
 agenthub admin events --follow             # 实时事件流
 ```

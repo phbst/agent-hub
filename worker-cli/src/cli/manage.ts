@@ -136,8 +136,11 @@ async function agentsCommand(ctx: CliContext): Promise<void> {
   const sub = ctx.positional[1] ?? "list";
   const { client } = await adminClient();
   if (sub === "list") {
-    const { data, error } = await client.from("agents").select("*").order("name");
+    let request = client.from("agents").select("*").order("name");
+    if (!ctx.flags.get("all")) request = request.neq("status", "revoked");
+    const { data, error } = await request;
     if (error) throw error;
+    if (!data?.length) { ctx.out(dim("(无 Agent;已吊销的用 --all 查看)")); return; }
     ctx.out(table(
       [{ header: "AGENT" }, { header: "状态" }, { header: "模式" }, { header: "负载" }, { header: "心跳" }, { header: "标签", max: 30 }],
       (data ?? []).map((agent) => {
@@ -157,10 +160,10 @@ async function agentsCommand(ctx: CliContext): Promise<void> {
   const ref = ctx.positional[2];
   if (!ref) ctx.fail(`用法: agenthub admin agents ${sub} <name>`);
   const agent = await resolveAgent(client, ref!);
-  if (sub === "approve" || sub === "revoke") {
+  if (sub === "approve" || sub === "revoke" || sub === "remove") {
     const { error } = await client.functions.invoke("admin", { body: { action: sub, agent_id: agent.id } });
     if (error) throw new Error(error.message);
-    ctx.out(ok(`${sub === "approve" ? "已批准" : "已吊销"} ${agent.name}`));
+    ctx.out(ok(`${sub === "approve" ? "已批准" : sub === "revoke" ? "已吊销" : "已删除"} ${agent.name}`));
     return;
   }
   if (sub === "pause" || sub === "resume") {

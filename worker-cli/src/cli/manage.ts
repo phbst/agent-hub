@@ -34,7 +34,7 @@ async function taskCommand(ctx: CliContext): Promise<void> {
 
   if (sub === "create") {
     const promptText = ctx.flags.get("prompt") ?? ctx.positional.slice(2).join(" ");
-    if (!promptText) ctx.fail('用法: agenthub task create "<描述>" [--target agent:x|label:a,b] [--priority N] [--timeout 分钟] [--file p]...');
+    if (!promptText) ctx.fail('用法: agenthub admin task create "<描述>" [--target agent:x|label:a,b] [--priority N] [--timeout 分钟] [--file p]...');
     const targetFlag = ctx.flags.get("target") ?? "auto";
     const target = targetFlag.startsWith("agent:")
       ? { type: "agent" as const, name: targetFlag.slice(6) }
@@ -57,7 +57,7 @@ async function taskCommand(ctx: CliContext): Promise<void> {
   }
 
   const ref = ctx.positional[2];
-  if (!ref) ctx.fail(`用法: agenthub task ${sub} <id前缀|标题关键词>`);
+  if (!ref) ctx.fail(`用法: agenthub admin task ${sub} <id前缀|标题关键词>`);
   const task = await resolveTask(client, ref!);
 
   if (sub === "show") {
@@ -104,7 +104,7 @@ async function taskCommand(ctx: CliContext): Promise<void> {
   }
   if (sub === "answer") {
     const answer = ctx.positional.slice(3).join(" ") || ctx.flags.get("text");
-    if (!answer) ctx.fail("用法: agenthub task answer <id前缀> <答复内容>");
+    if (!answer) ctx.fail("用法: agenthub admin task answer <id前缀> <答复内容>");
     const { error } = await client.rpc("answer_task", { p_task_id: task.id, p_answer: answer, p_via: "api" });
     if (error) throw error;
     ctx.out(ok(`已答复 #${shortId(task.id)},任务恢复执行`));
@@ -117,7 +117,7 @@ async function taskCommand(ctx: CliContext): Promise<void> {
     const pick = ctx.flags.get("download") ?? (sub === "log" ? wanted[0]!.name : undefined);
     if (!pick) {
       for (const file of wanted) ctx.out(`  ${dim(`[${file.direction}]`)} ${file.name} ${dim(kb(file.size))}`);
-      ctx.out(note("\n下载: agenthub task files <id> --download <name> [--out 目录]"));
+      ctx.out(note("\n下载: agenthub admin task files <id> --download <name> [--out 目录]"));
       return;
     }
     const file = wanted.find((item) => item.name === pick);
@@ -155,7 +155,7 @@ async function agentsCommand(ctx: CliContext): Promise<void> {
     return;
   }
   const ref = ctx.positional[2];
-  if (!ref) ctx.fail(`用法: agenthub agents ${sub} <name>`);
+  if (!ref) ctx.fail(`用法: agenthub admin agents ${sub} <name>`);
   const agent = await resolveAgent(client, ref!);
   if (sub === "approve" || sub === "revoke") {
     const { error } = await client.functions.invoke("admin", { body: { action: sub, agent_id: agent.id } });
@@ -173,7 +173,7 @@ async function agentsCommand(ctx: CliContext): Promise<void> {
     const patch: Record<string, unknown> = {};
     if (ctx.flags.get("labels")) patch.labels = ctx.flags.get("labels")!.split(",").map((s) => s.trim()).filter(Boolean);
     if (ctx.flags.get("concurrency")) patch.max_concurrency = Number(ctx.flags.get("concurrency"));
-    if (!Object.keys(patch).length) ctx.fail("用法: agenthub agents edit <name> --labels a,b --concurrency N");
+    if (!Object.keys(patch).length) ctx.fail("用法: agenthub admin agents edit <name> --labels a,b --concurrency N");
     const { error } = await client.from("agents").update(patch).eq("id", agent.id);
     if (error) throw error;
     ctx.out(ok(`已更新 ${agent.name}: ${JSON.stringify(patch)}`));
@@ -184,14 +184,55 @@ async function agentsCommand(ctx: CliContext): Promise<void> {
 
 interface EventRow { task_id: string | null; agent_id: string | null; kind: string; created_at: string; payload: Record<string, unknown> }
 
+async function tokenCommand(ctx: CliContext): Promise<void> {
+  const { client } = await adminClient();
+  const { data, error } = await client.functions.invoke("admin", {
+    body: { action: "bootstrap", minutes: Number(ctx.flags.get("minutes") ?? 60) || 60, uses: Number(ctx.flags.get("uses") ?? 1) || 1 },
+  });
+  if (error) throw new Error(error.message);
+  ctx.out(bold(data.token));
+  ctx.out(note(`有效至 ${data.expires_at} · 可用 ${data.uses} 次`));
+}
+
+async function eventsCommand(ctx: CliContext): Promise<void> {
+  const { client } = await adminClient();
+  const limit = Number(ctx.flags.get("limit") ?? 30) || 30;
+  const { data, error } = await client.from("events").select("*, tasks(title), agents(name)").order("id", { ascending: false }).limit(limit);
+  if (error) throw error;
+  const print = (event: Record<string, unknown>) => {
+    const task = (event.tasks as { title?: string } | null)?.title ?? "";
+    const agent = (event.agents as { name?: string } | null)?.name ?? "";
+    ctx.out(`${dim(when(event.created_at as string))}  ${badge(String(event.kind).replace(/^task\./, ""))}  ${agent}  ${dim(task)}`);
+  };
+  for (const event of (data ?? []).reverse()) print(event as Record<string, unknown>);
+  if (!ctx.flags.get("follow")) return;
+  ctx.out(note("\n(实时跟踪中,Ctrl+C 退出)"));
+  client.channel("cli-events").on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, async (payload) => {
+    const row = payload.new as EventRow;
+    const [task, agent] = await Promise.all([
+      row.task_id ? client.from("tasks").select("title").eq("id", row.task_id).single() : Promise.resolve({ data: null }),
+      row.agent_id ? client.from("agents").select("name").eq("id", row.agent_id).single() : Promise.resolve({ data: null }),
+    ]);
+    print({ ...row, tasks: task.data, agents: agent.data });
+  }).subscribe();
+  await new Promise(() => { /* until Ctrl+C */ });
+}
+
+// All hub-wide operations live under `agenthub admin …` — they act on every agent and task, and
+// require the separate administrator identity. Machine-level commands never gain this scope.
 export const manageCommands: CommandDefinition[] = [
   {
     name: "admin",
     group: "管理",
-    usage: "agenthub admin login | logout | whoami",
-    describe: "管理员登录 / 退出 / 身份",
+    usage: "agenthub admin <login|logout|whoami|task|agents|token|events> …",
+    describe: "超级管理员:全局任务 / 所有 Agent / 令牌 / 事件(=Web 管理台)",
     run: async (ctx) => {
       const sub = ctx.positional[1] ?? "whoami";
+      const shifted = { ...ctx, positional: ctx.positional.slice(1) };
+      if (sub === "task") return taskCommand(shifted);
+      if (sub === "agents") return agentsCommand(shifted);
+      if (sub === "token") return tokenCommand(ctx);
+      if (sub === "events") return eventsCommand(ctx);
       if (sub === "login") {
         const config = await loadConfig(ctx.configPath).catch(() => null);
         const hubUrl = ctx.flags.get("url") ?? config?.hub.url ?? (await ctx.ask("Hub URL"));
@@ -207,54 +248,12 @@ export const manageCommands: CommandDefinition[] = [
         ctx.out(ok("已退出管理员登录。"));
         return;
       }
-      const { email } = await adminClient();
-      ctx.out(`管理员: ${bold(email)}`);
-    },
-  },
-  { name: "task", group: "管理", usage: "agenthub task <list|show|create|cancel|retry|answer|files|log> …", describe: "任务:记录 / 详情 / 派发 / 取消 / 重试 / 拍板 / 文件", run: taskCommand },
-  { name: "agents", group: "管理", usage: "agenthub agents <list|approve|revoke|pause|resume|edit> …", describe: "Agent:清单 / 审批 / 吊销 / 暂停 / 编辑", run: agentsCommand },
-  {
-    name: "token",
-    group: "管理",
-    usage: "agenthub token [--minutes 60] [--uses 1]",
-    describe: "生成 worker 注册令牌",
-    run: async (ctx) => {
-      const { client } = await adminClient();
-      const { data, error } = await client.functions.invoke("admin", {
-        body: { action: "bootstrap", minutes: Number(ctx.flags.get("minutes") ?? 60) || 60, uses: Number(ctx.flags.get("uses") ?? 1) || 1 },
-      });
-      if (error) throw new Error(error.message);
-      ctx.out(bold(data.token));
-      ctx.out(note(`有效至 ${data.expires_at} · 可用 ${data.uses} 次`));
-    },
-  },
-  {
-    name: "events",
-    group: "管理",
-    usage: "agenthub events [--limit 30] [--follow]",
-    describe: "事件流(--follow 实时跟踪)",
-    run: async (ctx) => {
-      const { client } = await adminClient();
-      const limit = Number(ctx.flags.get("limit") ?? 30) || 30;
-      const { data, error } = await client.from("events").select("*, tasks(title), agents(name)").order("id", { ascending: false }).limit(limit);
-      if (error) throw error;
-      const print = (event: Record<string, unknown>) => {
-        const task = (event.tasks as { title?: string } | null)?.title ?? "";
-        const agent = (event.agents as { name?: string } | null)?.name ?? "";
-        ctx.out(`${dim(when(event.created_at as string))}  ${badge(String(event.kind).replace(/^task\./, ""))}  ${agent}  ${dim(task)}`);
-      };
-      for (const event of (data ?? []).reverse()) print(event as Record<string, unknown>);
-      if (!ctx.flags.get("follow")) return;
-      ctx.out(note("\n(实时跟踪中,Ctrl+C 退出)"));
-      client.channel("cli-events").on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, async (payload) => {
-        const row = payload.new as EventRow;
-        const [task, agent] = await Promise.all([
-          row.task_id ? client.from("tasks").select("title").eq("id", row.task_id).single() : Promise.resolve({ data: null }),
-          row.agent_id ? client.from("agents").select("name").eq("id", row.agent_id).single() : Promise.resolve({ data: null }),
-        ]);
-        print({ ...row, tasks: task.data, agents: agent.data });
-      }).subscribe();
-      await new Promise(() => { /* until Ctrl+C */ });
+      if (sub === "whoami") {
+        const { email } = await adminClient();
+        ctx.out(`管理员: ${bold(email)}`);
+        return;
+      }
+      ctx.fail(`未知 admin 子命令: ${sub}(可用 login|logout|whoami|task|agents|token|events)`);
     },
   },
 ];

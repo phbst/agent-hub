@@ -154,6 +154,27 @@ export const machineCommands: CommandDefinition[] = [
     },
   },
   {
+    name: "tasks",
+    group: "机器",
+    usage: "agenthub tasks [--status running] [--limit 20]",
+    describe: "查看指派给本机 agent 的任务(仅本机权限)",
+    run: async (ctx) => {
+      const config = await loadConfig(ctx.configPath);
+      const creds = await readCredentials(config.hub.credentials_file);
+      const client = createClient(config.hub.url, config.hub.anon_key, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { error: signInError } = await client.auth.signInWithPassword({ email: creds.email, password: creds.password });
+      if (signInError) ctx.fail(`认证失败: ${signInError.message}`);
+      let request = client.from("tasks").select("id,title,status,progress,created_at")
+        .eq("assigned_to", creds.agent_id).order("created_at", { ascending: false })
+        .limit(Number(ctx.flags.get("limit") ?? 20) || 20);
+      if (ctx.flags.get("status")) request = request.eq("status", ctx.flags.get("status")!);
+      const { data, error } = await request;
+      if (error) throw error;
+      if (!data?.length) { ctx.out(dim("(本机 agent 没有匹配的任务)")); return; }
+      for (const task of data) ctx.out(`${dim(task.id.slice(0, 8))}  ${badge(task.status)}  ${task.title}${task.progress ? dim(` — ${task.progress}`) : ""}`);
+    },
+  },
+  {
     name: "logout",
     group: "机器",
     usage: "agenthub logout",

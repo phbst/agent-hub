@@ -90,24 +90,31 @@ login 的核心选择是**默认执行服务**:`1)` Claude Agent SDK(推荐,内�
 - **Prompt skills**:`agenthub skill list | show <名> | use <名> | new <名> | edit <名> | preview`。内置三个(`default` 通用、`coding` 工程、`research` 调研);自定义放 `~/.config/agent-hub/skills/*.md`,模板用 `{{TASK}}`、`{{CONTINUATION}}`、`{{PROTOCOL}}` 占位符(漏写协议块会自动补上,保证结果始终可解析)。选中的 skill 决定 agent 处理每个派发任务的框架。
 - **任意配置项**:`agenthub config show` / `agenthub config set executor.reasoning high`。
 
-### CLI 运维(与 Web 管理台功能一一对应)
+### 两层权限模型
 
-管理台的每个能力都有对应命令。先以管理员身份登录一次(同一个 `app_metadata.role=admin` 的 Supabase 用户;Web 端走魔法链接,CLI 走邮箱+密码,需先在 Supabase 控制台给该用户设置密码):
+CLI 严格分为两个权限层,命令结构与权限边界一致:
+
+| 层 | 命令 | 身份与能力边界 |
+|---|---|---|
+| **客户端(本机)** | `agenthub <命令>` | 用本机 agent 凭证。只能:注册/运行本机 worker、改本机配置(模型/skill/工作目录)、查看**指派给本机 agent 的任务**(`agenthub tasks`)。RLS 在数据库层强制,即使机器被攻破也拿不到别人的任务。 |
+| **管理员(全局)** | `agenthub admin <命令>` | 需 `agenthub admin login`(`app_metadata.role=admin` 的 Supabase 用户)。等同 Web 管理台:全局派发/取消/拍板、审批/吊销/暂停任意 agent、生成注册令牌、全局事件流。 |
+
+管理员身份先在 Supabase 控制台给该用户设置密码(Web 端走魔法链接,CLI 走邮箱+密码),然后:
 
 ```bash
-agenthub admin login                 # refresh token 持久化在 ~/.config/agent-hub/admin.json
-agenthub task list --status running  # 记录页:--status/--agent/--query/--limit 筛选
-agenthub task show 3fa8              # 详情:指令/结果/问答/文件/时间线(id 前缀或标题关键词)
-agenthub task create "跑一遍集成测试" --target agent:server-codex --file report.csv
-agenthub task answer 3fa8 "低峰期执行"   # 拍板答复并恢复执行
-agenthub task cancel 3fa8            # 实时中止 running 任务
-agenthub task log 3fa8               # 打印推理过程 transcript
-agenthub agents approve new-runner   # 审批注册;还有 revoke/pause/resume/edit
-agenthub token --minutes 120 --uses 3
-agenthub events --follow             # 实时事件流
+agenthub admin login                       # refresh token 持久化在 ~/.config/agent-hub/admin.json
+agenthub admin task list --status running  # 记录页:--status/--agent/--query/--limit 筛选
+agenthub admin task show 3fa8              # 详情:指令/结果/问答/文件/时间线(id 前缀或标题关键词)
+agenthub admin task create "跑一遍集成测试" --target agent:server-codex --file report.csv
+agenthub admin task answer 3fa8 "低峰期执行"  # 拍板答复并恢复执行
+agenthub admin task cancel 3fa8            # 实时中止 running 任务
+agenthub admin task log 3fa8               # 打印推理过程 transcript
+agenthub admin agents approve new-runner   # 审批注册;还有 revoke/pause/resume/edit
+agenthub admin token --minutes 120 --uses 3
+agenthub admin events --follow             # 实时事件流
 ```
 
-管理员身份与 worker 的 agent 凭证分开存储,同一台机器可以既跑 `agenthub start` 当 worker,又作为你的运维终端。
+管理员身份与 worker 的 agent 凭证分开存储,同一台机器可以既跑 `agenthub start` 当 worker,又作为你的运维终端;不 `admin login` 的机器永远只有客户端权限。
 
 ## Worker 注册
 

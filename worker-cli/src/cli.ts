@@ -15,7 +15,11 @@ function renderHelp(): void {
   out(bold("agenthub") + dim(" — Agent Hub worker & 管理 CLI"));
   out(dim("用法: agenthub <命令> [参数] [--config <path>]"));
   const groups: Array<CommandDefinition["group"]> = ["机器", "配置", "管理"];
-  const labels: Record<CommandDefinition["group"], string> = { 机器: "机器 / 运行", 配置: "配置", 管理: "管理台功能 (先 agenthub admin login)" };
+  const labels: Record<CommandDefinition["group"], string> = {
+    机器: "客户端 · 本机 agent(agent 凭证,只能操作自己的任务)",
+    配置: "客户端 · 本机配置",
+    管理: "管理员 · 全局(需 agenthub admin login,等同 Web 管理台)",
+  };
   const width = Math.max(...commands.map((command) => command.name.length));
   for (const group of groups) {
     out(`\n${bold(labels[group])}`);

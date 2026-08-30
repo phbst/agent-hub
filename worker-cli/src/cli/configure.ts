@@ -85,7 +85,7 @@ export const configureCommands: CommandDefinition[] = [
   {
     name: "skill",
     group: "配置",
-    usage: "agenthub skill list | show <n> | use <n> | new <n> | edit <n> | preview",
+    usage: "agenthub skill list|init|dir|show|use|new|edit|preview",
     describe: "管理派发任务使用的 prompt skill",
     run: async (ctx) => {
       const config = await loadConfig(ctx.configPath);
@@ -102,6 +102,24 @@ export const configureCommands: CommandDefinition[] = [
           ]),
         ));
         ctx.out(note(`\n当前: ${config.executor.skill ?? "内置 default"} · 切换: agenthub skill use <name>`));
+        ctx.out(note(`目录: ${config.paths.skills_dir}(直接增改 *.md 即生效;agenthub skill init 可导出内置模板)`));
+        return;
+      }
+      if (sub === "dir") {
+        ctx.out(config.paths.skills_dir);
+        return;
+      }
+      if (sub === "init") {
+        const existing = new Set((await listSkills(config)).filter((s) => !s.builtin).map((s) => s.name));
+        let exported = 0;
+        for (const skill of await listSkills(config)) {
+          if (!skill.builtin || existing.has(skill.name)) continue;
+          await writeCustomSkill(config, skill.name, skill.template, skill.description);
+          exported += 1;
+        }
+        ctx.out(ok(`已导出 ${exported} 个内置 skill 到 ${config.paths.skills_dir}`));
+        ctx.out(note("直接编辑目录里的 *.md(同名覆盖内置);新建 <名字>.md 即新增 skill,无需其他命令。"));
+        ctx.out(note("文件格式:开头 --- name/description --- 的 frontmatter,正文为模板,含 {{TASK}}/{{CONTINUATION}}/{{PROTOCOL}} 占位符。"));
         return;
       }
       if (sub === "show") {
@@ -126,8 +144,15 @@ export const configureCommands: CommandDefinition[] = [
           : await skillFilePath(config, name!);
         const editor = process.env.EDITOR ?? "nano";
         ctx.out(dim(`编辑 ${file} (${editor})`));
-        await new Promise<void>((resolve) => spawn(editor, [file], { stdio: "inherit" }).on("close", () => resolve()));
-        ctx.out(ok(`保存完毕。启用: agenthub skill use ${name}`));
+        await new Promise<void>((resolve) => {
+          const child = spawn(editor, [file], { stdio: "inherit" });
+          child.on("close", () => resolve());
+          child.on("error", () => {
+            ctx.out(note(`无法启动编辑器 ${editor};文件已就位,直接编辑: ${file}`));
+            resolve();
+          });
+        });
+        ctx.out(ok(`文件: ${file} · 启用: agenthub skill use ${name}`));
         return;
       }
       if (sub === "preview") {

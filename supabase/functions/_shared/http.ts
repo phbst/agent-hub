@@ -2,7 +2,11 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.4";
 
 export const corsHeaders = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, apikey, content-type, x-channel-secret, x-hub-webhook-secret",
+  "access-control-allow-methods": "POST, GET, OPTIONS",
+  // x-client-info / x-supabase-api-version are always sent by supabase-js in browsers; omitting
+  // them fails the preflight and surfaces as "Failed to send a request to the Edge Function".
+  "access-control-allow-headers":
+    "authorization, apikey, content-type, x-client-info, x-supabase-api-version, x-channel-secret, x-hub-webhook-secret",
 };
 
 export function json(payload: unknown, status = 200): Response {

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { TaskRecord } from "../../shared/types.js";
@@ -11,16 +12,61 @@ export interface ExecutionResult {
   interrupted?: boolean;
 }
 
+export type ProgressReporter = (line: string) => void;
+
 function replaceTokens(value: string, workdir: string, task: TaskRecord): string {
   return value.replaceAll("{workdir}", workdir).replaceAll("{task_id}", task.id);
 }
 
-export async function executeTask(config: WorkerConfig, task: TaskRecord, signal?: AbortSignal): Promise<ExecutionResult> {
+// Build the executor command line. When `args` is configured it wins (custom kind); otherwise we
+// generate the standard invocation for the chosen CLI, injecting the default model and the
+// bypass-permission flags so sessions run with full local (npm/root-of-this-user) capability.
+export function resolveCommand(config: WorkerConfig, workdir: string): { command: string; args: string[] } {
+  const { kind, command, args, model, reasoning } = config.executor;
+  if (kind === "custom" || args.length > 0) {
+    return { command, args };
+  }
+  if (kind === "claude") {
+    return {
+      command: command === "codex" ? "claude" : command,
+      args: [
+        "-p",
+        ...(model ? ["--model", model] : []),
+        "--permission-mode", config.executor.permission_mode,
+        ...(config.executor.permission_mode === "bypassPermissions" ? ["--dangerously-skip-permissions"] : []),
+        "--output-format", "stream-json", "--verbose",
+      ],
+    };
+  }
+  // codex (default)
+  const bypass = config.executor.permission_mode === "bypassPermissions";
+  return {
+    command: command === "claude" ? "codex" : command,
+    args: [
+      "exec", "--skip-git-repo-check", "-C", workdir,
+      ...(model ? ["-m", model] : []),
+      ...(reasoning !== "auto" ? ["-c", `model_reasoning_effort=${reasoning}`] : []),
+      ...(bypass ? ["--dangerously-bypass-approvals-and-sandbox"] : ["--sandbox", "workspace-write"]),
+      "-",
+    ],
+  };
+}
+
+function lastMeaningfulLine(chunk: Buffer): string | null {
+  const lines = chunk.toString("utf8").split("\n").map((line) => line.trim()).filter(Boolean);
+  const line = lines[lines.length - 1];
+  return line ? line.slice(0, 200) : null;
+}
+
+export async function executeTask(config: WorkerConfig, task: TaskRecord, signal?: AbortSignal, onProgress?: ProgressReporter): Promise<ExecutionResult> {
   const workdir = path.join(config.agent.workspace_root, task.id);
   await mkdir(workdir, { recursive: true, mode: 0o700 });
-  const args = config.executor.args.map((argument) => replaceTokens(argument, workdir, task));
+  const resolved = resolveCommand(config, workdir);
+  const args = resolved.args.map((argument) => replaceTokens(argument, workdir, task));
+  const transcript = createWriteStream(path.join(workdir, "transcript.log"), { flags: "a", mode: 0o600 });
+  transcript.write(`\n===== turn started ${new Date().toISOString()} =====\n`);
   return new Promise((resolve, reject) => {
-    const child = spawn(config.executor.command, args, {
+    const child = spawn(resolved.command, args, {
       cwd: workdir,
       env: { ...process.env, AGENT_HUB_TASK_ID: task.id },
       stdio: ["pipe", "pipe", "pipe"],
@@ -36,8 +82,18 @@ export async function executeTask(config: WorkerConfig, task: TaskRecord, signal
       target.push(next);
       return current + next.length;
     };
-    child.stdout.on("data", (chunk: Buffer) => { outputBytes = collect(output, chunk, outputBytes); });
-    child.stderr.on("data", (chunk: Buffer) => { errorBytes = collect(errors, chunk, errorBytes); });
+    child.stdout.on("data", (chunk: Buffer) => {
+      outputBytes = collect(output, chunk, outputBytes);
+      transcript.write(chunk);
+      if (onProgress) {
+        const line = lastMeaningfulLine(chunk);
+        if (line) onProgress(line);
+      }
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      errorBytes = collect(errors, chunk, errorBytes);
+      transcript.write(chunk);
+    });
     let timedOut = false;
     let interrupted = false;
     const terminate = (): void => {
@@ -53,11 +109,13 @@ export async function executeTask(config: WorkerConfig, task: TaskRecord, signal
     child.once("error", (error) => {
       clearTimeout(timeout);
       signal?.removeEventListener("abort", onAbort);
+      transcript.end(`\n===== executor error: ${error.message} =====\n`);
       reject(error);
     });
     child.once("close", (code) => {
       clearTimeout(timeout);
       signal?.removeEventListener("abort", onAbort);
+      transcript.end(`\n===== turn ended (exit ${code ?? -1}) ${new Date().toISOString()} =====\n`);
       const stdout = Buffer.concat(output).toString("utf8").trim();
       const stderr = Buffer.concat(errors).toString("utf8").trim();
       resolve({ result: stdout || stderr || `Executor exited with code ${code ?? -1}`, exitCode: code ?? -1, timedOut, interrupted });

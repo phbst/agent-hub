@@ -6,13 +6,25 @@ credentials_file = "~/.config/agent-hub/credentials.json"
 [agent]
 name = "server-codex"
 labels = ["linux", "codex", "server-files"]
-mode = "cli"
+mode = "sdk"                 # sdk | cli
 max_concurrency = 2
 workspace_root = "~/agent-hub-workspaces"
 heartbeat_seconds = 30
 
 [executor]
-command = "codex"
-args = ["exec", "--skip-git-repo-check", "--sandbox", "workspace-write", "-C", "{workdir}", "-"]
-prompt_stdin = true
+kind = "sdk"                 # sdk | codex | claude | custom
+# model = "claude-opus-5"    # default model; omit to use the executor default
+reasoning = "auto"           # low | medium | high | auto  (codex only)
+permission_mode = "bypassPermissions"   # bypassPermissions | acceptEdits | default | plan
+# skill = "coding"           # active prompt skill; omit to use the built-in default
+wrap_prompt = true
+progress_interval_seconds = 30
 result_max_chars = 200000
+max_turns = 120
+
+# custom executor only (kind = "custom"): explicit command + args, {workdir}/{task_id} tokens
+# command = "codex"
+# args = ["exec", "--skip-git-repo-check", "-C", "{workdir}", "--dangerously-bypass-approvals-and-sandbox", "-"]
+
+[paths]
+skills_dir = "~/.config/agent-hub/skills"

@@ -1,0 +1,16 @@
+[Unit]
+Description=Agent Hub WeChat result notifier
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.agent-hub/notifier.env
+ExecStart=/usr/bin/env node @NOTIFIER_PATH@
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

@@ -1,10 +1,25 @@
 {
-  "name": "agent-hub",
+  "name": "agenthub",
   "version": "0.1.0",
-  "private": true,
+  "description": "Agent Hub worker CLI — connect a machine to a Supabase-backed multi-agent task hub and run dispatched tasks with pluggable prompt skills.",
+  "keywords": ["agent", "cli", "worker", "task-queue", "supabase", "ai", "claude", "codex"],
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
+  },
+  "bin": {
+    "agenthub": "dist/node/worker-cli/src/cli.js"
+  },
+  "files": [
+    "dist/node/shared",
+    "dist/node/worker-cli",
+    "dist/node/worker-sdk",
+    "worker-cli/worker.toml.example",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "npm run build:node && npm run build:web",
@@ -14,15 +29,14 @@
     "dev:web": "vite --config web/vite.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p web/tsconfig.json",
+    "agenthub": "tsx worker-cli/src/cli.ts",
     "worker:cli": "tsx worker-cli/src/main.ts",
-    "worker:sdk": "tsx worker-sdk/src/main.ts"
+    "worker:sdk": "tsx worker-sdk/src/main.ts",
+    "prepublishOnly": "npm run build:node"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.251",
     "@supabase/supabase-js": "2.112.4",
-    "lucide-react": "1.35.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
     "smol-toml": "1.8.0",
     "zod": "4.5.2"
   },
@@ -31,6 +45,9 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "latest",
+    "lucide-react": "1.35.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "supabase": "^2.116.0",
     "tsx": "4.23.1",
     "typescript": "7.0.2",

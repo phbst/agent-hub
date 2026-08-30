@@ -6,7 +6,8 @@ export const legalTransitions: Readonly<Record<TaskStatus, readonly TaskStatus[]
   pending: ["assigned", "cancelled"],
   assigned: ["claimed", "cancelled", "pending"],
   claimed: ["running", "failed", "timeout", "cancelled", "pending"],
-  running: ["done", "failed", "timeout", "cancelled", "pending"],
+  running: ["waiting_input", "done", "failed", "timeout", "cancelled", "pending"],
+  waiting_input: ["assigned", "cancelled", "failed"],
   done: [],
   failed: [],
   timeout: ["pending", "failed"],
@@ -22,7 +23,7 @@ function hasLabels(agent: AgentRecord, labels: string[]): boolean {
 }
 
 export function chooseAgent(task: TaskRecord, agents: AgentRecord[]): AgentRecord | null {
-  const online = agents.filter((agent) => agent.status === "online" && agent.max_concurrency > 0);
+  const online = agents.filter((agent) => agent.status === "online" && !agent.paused && agent.max_concurrency > 0);
   const { target } = task;
   let candidates: AgentRecord[];
   if (target.type === "agent") {

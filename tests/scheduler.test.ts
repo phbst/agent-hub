@@ -6,7 +6,7 @@ const now = new Date().toISOString();
 function agent(overrides: Partial<AgentRecord>): AgentRecord {
   return {
     id: crypto.randomUUID(), name: "agent", labels: [], mode: "cli", status: "online",
-    max_concurrency: 2, running_count: 0, last_heartbeat: now, auth_user_id: crypto.randomUUID(), created_at: now,
+    max_concurrency: 2, running_count: 0, paused: false, last_heartbeat: now, auth_user_id: crypto.randomUUID(), created_at: now,
     ...overrides,
   };
 }

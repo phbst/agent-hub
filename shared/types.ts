@@ -5,6 +5,7 @@ export const taskStatuses = [
   "assigned",
   "claimed",
   "running",
+  "waiting_input",
   "done",
   "failed",
   "timeout",
@@ -28,6 +29,7 @@ export interface AgentRecord {
   status: AgentStatus;
   max_concurrency: number;
   running_count: number;
+  paused: boolean;
   last_heartbeat: string | null;
   auth_user_id: string | null;
   created_at: string;
@@ -50,6 +52,31 @@ export interface TaskRecord {
   created_at: string;
   claimed_at: string | null;
   finished_at: string | null;
+}
+
+export interface InteractionRecord {
+  id: string;
+  task_id: string;
+  agent_id: string | null;
+  question: string;
+  context: string | null;
+  options: string | null;
+  answer: string | null;
+  answered_via: "web" | "wechat" | "api" | null;
+  asked_at: string;
+  answered_at: string | null;
+}
+
+export interface TaskFileRecord {
+  id: string;
+  task_id: string;
+  agent_id: string | null;
+  direction: "in" | "out" | "log";
+  name: string;
+  path: string;
+  size: number | null;
+  mime: string | null;
+  created_at: string;
 }
 
 export interface EventRecord {

@@ -64,7 +64,7 @@ export const configureCommands: CommandDefinition[] = [
       } else {
         const config = await loadConfig(ctx.configPath);
         ctx.out(config.executor.model ?? dim("(执行器默认)"));
-        ctx.out(note("常用: claude-fable-5 · claude-opus-5 · claude-sonnet-5 · codex: gpt-5-codex, o4-mini"));
+        ctx.out(note("常用: claude-fable-5(默认)· claude-opus-5 · claude-sonnet-5 · codex: gpt-5.6-sol(默认)"));
       }
     },
   },

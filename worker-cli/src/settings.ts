@@ -22,7 +22,7 @@ export interface NewConfigInput {
 export function buildConfig(input: NewConfigInput): RawConfig {
   const executor: Record<string, unknown> = {
     kind: input.executorKind,
-    reasoning: "auto",
+    reasoning: input.executorKind === "codex" ? "medium" : "auto",
     permission_mode: "bypassPermissions",
     wrap_prompt: true,
   };

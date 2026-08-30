@@ -3,6 +3,7 @@ import { loadConfig } from "./config.js";
 import { readCredentials } from "./credentials.js";
 import { register } from "./registration.js";
 import { Worker } from "./worker.js";
+import { acquireWorkerLock } from "./lock.js";
 
 process.umask(0o077);
 
@@ -18,6 +19,7 @@ if (command === "register") {
   if (!token) throw new Error("register requires --bootstrap-token or AGENT_HUB_BOOTSTRAP_TOKEN");
   await register(config, token);
 } else if (command === "start") {
+  const releaseLock = await acquireWorkerLock(configPath);
   const worker = new Worker(config, await readCredentials(config.hub.credentials_file));
   await worker.start();
   let stopping = false;
@@ -28,6 +30,7 @@ if (command === "register") {
       try {
         await worker.stop();
       } finally {
+        await releaseLock();
         resolve();
       }
     };

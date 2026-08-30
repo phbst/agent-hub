@@ -8,6 +8,7 @@ import { Worker } from "../worker.js";
 import { executeTask } from "../executor.js";
 import { executeSdkTask } from "../../../worker-sdk/src/executor.js";
 import { buildConfig, setValue, writeRaw } from "../settings.js";
+import { acquireWorkerLock } from "../lock.js";
 import type { CliContext, CommandDefinition } from "./context.js";
 import { badge, bold, dim, heading, kv, note, ok } from "./ui.js";
 
@@ -79,7 +80,7 @@ export const machineCommands: CommandDefinition[] = [
       const name = await ctx.ask("Agent 名称 (a-z0-9-_)", "worker-1");
       const labels = (await ctx.ask("标签 (逗号分隔)", "linux")).split(",").map((s) => s.trim()).filter(Boolean);
       const service = await pickService(ctx);
-      const modelDefault = service.kind === "codex" ? "gpt-5-codex" : service.kind === "custom" ? "" : "claude-opus-5";
+      const modelDefault = service.kind === "codex" ? "gpt-5.6-sol" : service.kind === "custom" ? "" : "claude-fable-5";
       const model = await ctx.ask("默认模型 (留空用服务默认)", modelDefault);
       const maxConcurrency = Number(await ctx.ask("最大并发", "2")) || 2;
       const workspaceRoot = await ctx.ask("工作目录", "~/agent-hub-workspaces");
@@ -115,13 +116,14 @@ export const machineCommands: CommandDefinition[] = [
     describe: "启动 worker(长驻,领取并执行任务)",
     run: async (ctx) => {
       const config = await loadConfig(ctx.configPath);
+      const releaseLock = await acquireWorkerLock(ctx.configPath);
       const worker = new Worker(config, await readCredentials(config.hub.credentials_file), executorFor(config));
       await worker.start();
       ctx.out(ok(`worker 已启动 · ${bold(config.agent.name)}`));
       ctx.out(dim(`模式 ${config.agent.mode} · 模型 ${config.executor.model ?? "默认"} · skill ${config.executor.skill ?? "内置 default"}`));
       await new Promise<void>((resolve) => {
         let stopping = false;
-        const stop = async () => { if (stopping) return; stopping = true; try { await worker.stop(); } finally { resolve(); } };
+        const stop = async () => { if (stopping) return; stopping = true; try { await worker.stop(); } finally { await releaseLock(); resolve(); } };
         process.once("SIGINT", () => void stop());
         process.once("SIGTERM", () => void stop());
       });

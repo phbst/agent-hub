@@ -78,3 +78,17 @@ describe("wrapPrompt continuation", () => {
     expect(wrapped).toContain("do not start over");
   });
 });
+
+describe("echoed prompt templates are not parsed as answers", () => {
+  const echoedPrompt = wrapPrompt({ prompt: "do the thing" });
+  it("ignores the protocol template when the executor only echoed the prompt", () => {
+    expect(parseResultBlock(echoedPrompt).found).toBe(false);
+    expect(parseQuestionBlock(echoedPrompt).found).toBe(false);
+  });
+  it("still finds the real block after an echoed prompt", () => {
+    const output = `${echoedPrompt}\n模型输出...\n===RESULT===\nstatus: success\nsummary: 真结果\n===END===`;
+    const parsed = parseResultBlock(output);
+    expect(parsed.status).toBe("success");
+    expect(parsed.summary).toBe("真结果");
+  });
+});

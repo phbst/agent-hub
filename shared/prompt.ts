@@ -80,12 +80,29 @@ export function wrapPrompt(task: Pick<TaskRecord, "prompt">, interactions: Answe
   ].join("\n");
 }
 
+// Some executors (codex exec) echo the submitted prompt, so the protocol template inside the
+// prompt reappears in the output. Walk blocks from the end and skip anything that is the literal
+// instruction template rather than a real answer.
+function lastRealBlock(output: string, marker: string, isTemplate: (block: string) => boolean): string | null {
+  let index = output.lastIndexOf(marker);
+  while (index >= 0) {
+    const rest = output.slice(index + marker.length);
+    const end = rest.indexOf(resultBlockEnd);
+    const block = (end >= 0 ? rest.slice(0, end) : rest).trim();
+    if (!isTemplate(block)) return block;
+    index = output.lastIndexOf(marker, index - 1);
+  }
+  return null;
+}
+
+const resultTemplate = (block: string): boolean =>
+  /status:\s*success \| failure/i.test(block) || block.includes("<one short paragraph");
+const questionTemplate = (block: string): boolean =>
+  block.includes("<one clear question") || block.includes("<optional short choices");
+
 export function parseQuestionBlock(output: string): ParsedQuestion {
-  const start = output.lastIndexOf(questionBlockStart);
-  if (start < 0) return { question: "", options: "", context: "", found: false };
-  const rest = output.slice(start + questionBlockStart.length);
-  const end = rest.indexOf(resultBlockEnd);
-  const block = (end >= 0 ? rest.slice(0, end) : rest).trim();
+  const block = lastRealBlock(output, questionBlockStart, questionTemplate);
+  if (block === null) return { question: "", options: "", context: "", found: false };
   const field = (name: string): string => {
     const match = block.match(new RegExp(`^${name}:\\s*([\\s\\S]*?)(?=^\\s*(?:question|options|context):|\\s*$)`, "im"));
     return (match?.[1] ?? "").trim();
@@ -95,11 +112,8 @@ export function parseQuestionBlock(output: string): ParsedQuestion {
 }
 
 export function parseResultBlock(output: string): ParsedResult {
-  const start = output.lastIndexOf(resultBlockStart);
-  if (start < 0) return { status: null, summary: "", detail: "", found: false };
-  const rest = output.slice(start + resultBlockStart.length);
-  const end = rest.indexOf(resultBlockEnd);
-  const block = (end >= 0 ? rest.slice(0, end) : rest).trim();
+  const block = lastRealBlock(output, resultBlockStart, resultTemplate);
+  if (block === null) return { status: null, summary: "", detail: "", found: false };
   const statusMatch = block.match(/^status:\s*(success|failure)\s*$/im);
   const summaryMatch = block.match(/^summary:\s*([\s\S]*?)(?=^\s*(?:detail|status):|\s*$)/im);
   const detailMatch = block.match(/^detail:\s*([\s\S]*)$/im);

@@ -32,6 +32,12 @@ sed \
   -e "s|@EXEC_PATH@|$(escape_sed "$EXEC_PATH")|g" \
   -e "s|@LOG_DIR@|$(escape_sed "$LOG_DIR")|g" \
   worker-cli/deploy/com.agent-hub.worker.plist.in > "$PLIST.new"
+# Inherit the installing user's proxy settings so the worker's executors reach model APIs
+# the same way an interactive shell does.
+for VAR in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY; do
+  VALUE=$(eval "printf '%s' \"\${$VAR:-}\"")
+  [ -n "$VALUE" ] && plutil -insert "EnvironmentVariables.$VAR" -string "$VALUE" "$PLIST.new"
+done
 plutil -lint "$PLIST.new" >/dev/null
 chmod 600 "$PLIST.new"
 mv "$PLIST.new" "$PLIST"

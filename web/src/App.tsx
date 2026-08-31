@@ -31,7 +31,11 @@ function Login(): React.ReactElement {
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: loginRedirectUrl() } });
     setMessage(error ? error.message : "登录链接已发送，请检查邮箱。");
   };
-  return <main className="login-shell"><section className="login-panel"><div className="brand-mark"><ShieldCheck size={22} /> Agent Hub</div><h1>管理员登录</h1><p>使用白名单邮箱接收一次性登录链接。</p><form onSubmit={submit}><label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><button type="submit"><Send size={17} />发送登录链接</button></form>{message && <div className="notice">{message}</div>}</section></main>;
+  const google = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: loginRedirectUrl() } });
+    if (error) setMessage(error.message);
+  };
+  return <main className="login-shell"><section className="login-panel"><div className="brand-mark"><ShieldCheck size={22} /> Agent Hub</div><h1>管理员登录</h1><p>使用 Google 账号或白名单邮箱登录。</p><button type="button" className="google-button" onClick={() => void google()}><svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11 11 0 0 0 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>使用 Google 登录</button><div className="login-divider"><span>或</span></div><form onSubmit={submit}><label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><button type="submit"><Send size={17} />发送登录链接</button></form>{message && <div className="notice">{message}</div>}</section></main>;
 }
 
 export function App(): React.ReactElement {
